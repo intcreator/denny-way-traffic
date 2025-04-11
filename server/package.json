@@ -1,0 +1,22 @@
+{
+    "name": "denny-way-traffic-server",
+    "version": "0.0.1",
+    "type": "module",
+    "description": "A server that queries the Google Maps API for Denny Way traffic data",
+    "author": "Brandon der Blätter",
+    "main": "index.ts",
+    "scripts": {
+        "start": "npx tsx --env-file=.env --watch index.ts",
+        "dev": "npx tsx --env-file=.env.dev --watch index.ts"
+    },
+    "dependencies": {
+        "cron": "^4.1.3",
+        "express": "^5.1.0",
+        "mariadb": "^3.4.1",
+        "tsx": "^4.19.3"
+    },
+    "devDependencies": {
+        "@types/express": "^5.0.1",
+        "@types/node": "^22.14.0"
+    }
+}

@@ -1,0 +1,61 @@
+services:
+    ui:
+        build: ui
+        restart: on-failure:2
+        # ports:
+        #     - 3001:3000
+        #     - 8002:8002
+        #     - 38037:38037
+        expose:
+            - "80"
+        networks:
+            - reverse-proxy_reverse-proxy
+            - denny
+
+    server:
+        build: server
+        restart: on-failure:6
+        ports:
+            - 3000:3000
+        # expose:
+        #     - "3000"
+        depends_on:
+            - db
+        networks:
+            - reverse-proxy_reverse-proxy
+            - denny
+
+    db:
+        image: mariadb:11.6.2-noble
+        restart: on-failure:1
+        ports:
+            - 3306:3306
+        # expose:
+        #     - "3306"
+        env_file:
+            - ./server/.env
+        networks:
+            - denny
+
+    # cron:
+    #     # image: alpine
+    #     build: .
+    #     volumes:
+    #         # - ./crontabs:/var/spool/cron/crontabs
+    #         - ./crontabs:/etc/crontabs
+    #         - ./back-up-database.sh:/back-up-database.sh
+    #         - ./cron-entry.sh:/cron-entry.sh
+    #         - type: bind
+    #           source: /mnt/d/backups/denny-way-traffic
+    #           target: /backups
+    #     env_file:
+    #         - .env
+    #     command: crond -f -d 8
+    #     # entrypoint: /cron-entry.sh
+    #     networks:
+    #         - denny
+
+networks:
+    reverse-proxy_reverse-proxy:
+        external: true
+    denny:
