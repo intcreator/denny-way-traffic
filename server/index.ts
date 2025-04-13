@@ -2,9 +2,7 @@ import express from "express";
 import { CronJob } from 'cron';
 import mariadb from "mariadb";
 
-import type { RouteTime } from "../sharedTypes/routeTimes"
-
-type Direction = 'eastbound' | 'westbound';
+import type { Direction, RouteTime } from "../sharedTypes/routeTimes"
 
 type GoogleMapsAPIJSON = {
     routes: {

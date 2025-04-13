@@ -33,7 +33,7 @@ services:
         # expose:
         #     - "3306"
         env_file:
-            - ./server/.env
+            - ./server/.env.production
         networks:
             - denny
 

@@ -1,7 +1,7 @@
 import type { Route } from "./+types/home";
 import { Main } from "../main/main";
 
-const baseURL = `http://localhost:3000`;
+const baseURL = import.meta.env.VITE_BASE_URL;
 
 export async function loader() {
     const routeTimesRes = await fetch(`${baseURL}/getRouteTimes`);

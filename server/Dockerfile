@@ -9,7 +9,7 @@ WORKDIR /app
 RUN npm ci --omit=dev
 
 FROM node:20-alpine
-COPY ./package.json package-lock.json .env index.ts /app/
+COPY ./package.json package-lock.json .env.production index.ts /app/
 COPY --from=production-dependencies-env /app/node_modules /app/node_modules
 WORKDIR /app
 CMD ["npm", "run", "start"]

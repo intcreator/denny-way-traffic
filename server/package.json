@@ -6,8 +6,8 @@
     "author": "Brandon der Blätter",
     "main": "index.ts",
     "scripts": {
-        "start": "npx tsx --env-file=.env --watch index.ts",
-        "dev": "npx tsx --env-file=.env.dev --watch index.ts"
+        "start": "npx tsx --env-file=.env.production --watch index.ts",
+        "dev": "npx tsx --env-file=.env --watch index.ts"
     },
     "dependencies": {
         "cron": "^4.1.3",

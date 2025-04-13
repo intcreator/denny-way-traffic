@@ -3,6 +3,7 @@
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif,
     "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --color-l8-yellow: #e8b929;
 }
 
 html,
@@ -12,4 +13,16 @@ body {
   @media (prefers-color-scheme: dark) {
     color-scheme: dark;
   }
+}
+
+.plot-d6a7b5 {
+  --plot-background: black;
+}
+
+a {
+  color: var(--color-l8-yellow);
+}
+
+a:hover {
+  text-decoration: underline;
 }

@@ -1,5 +1,7 @@
+export type Direction = 'eastbound' | 'westbound';
+
 export type RouteTime = {
-    unixMilliseconds: BigInt,
+    unixMilliseconds: string,
     routeSeconds: number,
     direction: Direction
 };
