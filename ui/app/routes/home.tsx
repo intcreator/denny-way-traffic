@@ -10,9 +10,14 @@ export async function loader() {
 }
 
 export function meta({ }: Route.MetaArgs) {
+    const title = "Denny Way Traffic History"
+    const description = "An app that tracks traffic on Denny Way"
     return [
-        { title: "Denny Way Traffic History" },
-        { name: "description", content: "An app that tracks traffic on Denny Way" },
+        { title: `${title}: ${description}` },
+        { name: "description", content: description },
+        { property: "og:description", content: description },
+        { property: "og:title", content: title },
+        { property: "og:image", content: "/denny-way-traffic-thumbnail.png" },
     ];
 }
 

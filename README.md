@@ -15,6 +15,8 @@ The project is built with TypeScript, using MySQL and Node.js for the server and
 
 ## Run dev servers
 
+See nested README and package.json files for details
+
 ### Server
 
 1. `cd denny-way-traffic/server`

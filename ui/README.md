@@ -20,7 +20,7 @@ Start the development server with HMR:
 npm run dev
 ```
 
-Your application will be available at `http://localhost:5173`.
+The application will be available at `http://localhost:5173`.
 
 ## Building for Production
 
@@ -34,20 +34,13 @@ npm run build
 
 ### Docker Deployment
 
-To build and run using Docker:
-
-```bash
-docker build -t my-app .
-
-# Run the container
-docker run -p 3000:3000 my-app
-```
+Run from the parent folder.
 
 ### DIY Deployment
 
-If you're familiar with deploying Node applications, the built-in app server is production-ready.
+The built-in app server is production-ready.
 
-Make sure to deploy the output of `npm run build`
+Deploy the output of `npm run build`
 
 ```
 ├── package.json
