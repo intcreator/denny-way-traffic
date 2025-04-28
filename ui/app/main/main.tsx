@@ -4,10 +4,16 @@ import { DateTime } from "luxon";
 // import * as d3 from "d3";
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 
+type PlotHours = 'all' | 'slowest' | 'fastest' | 'difference';
+type EnhancedRouteTime = RouteTime & {
+    routeMinutes: number,
+    routeDateTime: Date,
+}
+
 const l8Yellow = "#e8b929";
 const routeMiles = 1.09;
 
-const getPlot = (routeData: RouteTime[]) => {
+const getPlot = (routeData: RouteTime[], plotHours: PlotHours) => {
     return Plot.plot({
         width: 1000,
         marginBottom: 50,
@@ -17,7 +23,7 @@ const getPlot = (routeData: RouteTime[]) => {
             Plot.tip(routeData, Plot.pointerX({
                 x: "routeDateTime",
                 y: "routeMinutes",
-                title: (d) => `${DateTime.fromJSDate(d.routeDateTime).toFormat("ccc, LLL d 'at' h a")}\nDuration: ${Math.round(d.routeMinutes)} min\nSpeed: ${Math.round(60 / d.routeMinutes * routeMiles)} mph`,
+                title: (d) => `${DateTime.fromJSDate(d.routeDateTime).toFormat("ccc, LLL d 'at' h a")}\nDuration${plotHours === 'difference' ? ' difference' : ''}: ${Math.round(d.routeMinutes)} min${plotHours !== 'difference' ? `\nSpeed: ${Math.round(60 / d.routeMinutes * routeMiles)} mph` : ''}`,
             })),
             Plot.axisY({ anchor: "left", label: "Route Duration (minutes)", labelAnchor: "center", interval: 1 }),
             Plot.axisX({ anchor: "bottom", label: "Route Date and Time", labelAnchor: "center", ticks: 20, labelOffset: 50 }),
@@ -31,32 +37,51 @@ function Button({ children, onClick, active = false }: { children: string, onCli
     )
 }
 
-function PlotButton({ children, daysToSet, currentDays, setPlotDays }: { children: string, daysToSet: number, currentDays: number, setPlotDays: Dispatch<SetStateAction<number>> }) {
-    function updatePlot() {
+function DayPlotButton({ children, daysToSet, currentDays, setPlotDays }: { children: string, daysToSet: number, currentDays: number, setPlotDays: Dispatch<SetStateAction<number>> }) {
+    function updatePlotDays() {
         setPlotDays(daysToSet);
     }
 
     return (
-        <Button onClick={updatePlot} active={currentDays === daysToSet}>{children}</Button>
+        <Button onClick={updatePlotDays} active={currentDays === daysToSet}>{children}</Button>
     )
 }
 
-function PlotButtons({ currentDays, setPlotDays }: { currentDays: number, setPlotDays: Dispatch<SetStateAction<number>> }) {
+function HourPlotButton({ children, hoursToSet, currentHours, setPlotHours }: { children: string, hoursToSet: PlotHours, currentHours: PlotHours, setPlotHours: Dispatch<SetStateAction<PlotHours>> }) {
+    function updatePlotHours() {
+        setPlotHours(hoursToSet)
+    }
+
     return (
-        <div className="flex">
-            <PlotButton daysToSet={7} currentDays={currentDays} setPlotDays={setPlotDays}>Last 7 days</PlotButton>
-            <PlotButton daysToSet={14} currentDays={currentDays} setPlotDays={setPlotDays}>Last 14 days</PlotButton>
-            <PlotButton daysToSet={999} currentDays={currentDays} setPlotDays={setPlotDays}>All</PlotButton>
+        <Button onClick={updatePlotHours} active={currentHours === hoursToSet}>{children}</Button>
+    )
+}
+
+function PlotButtons({ currentDays, setPlotDays, currentHours, setPlotHours }: { currentDays: number, setPlotDays: Dispatch<SetStateAction<number>>, currentHours: PlotHours, setPlotHours: Dispatch<SetStateAction<PlotHours>> }) {
+    return (
+        <div className="flex justify-between">
+            <div className="flex">
+                <DayPlotButton daysToSet={7} currentDays={currentDays} setPlotDays={setPlotDays}>Last 7 days</DayPlotButton>
+                <DayPlotButton daysToSet={14} currentDays={currentDays} setPlotDays={setPlotDays}>Last 14 days</DayPlotButton>
+                <DayPlotButton daysToSet={999} currentDays={currentDays} setPlotDays={setPlotDays}>All days</DayPlotButton>
+            </div>
+            <div className="flex">
+                <HourPlotButton hoursToSet={'all'} currentHours={currentHours} setPlotHours={setPlotHours}>All hours</HourPlotButton>
+                <HourPlotButton hoursToSet={'slowest'} currentHours={currentHours} setPlotHours={setPlotHours}>Slowest hour</HourPlotButton>
+                <HourPlotButton hoursToSet={'fastest'} currentHours={currentHours} setPlotHours={setPlotHours}>Fastest hour</HourPlotButton>
+                <HourPlotButton hoursToSet={'difference'} currentHours={currentHours} setPlotHours={setPlotHours}>Difference</HourPlotButton>
+            </div>
         </div>
     )
 }
 
 export function Main({ routeData }: { routeData: RouteTime[] }) {
     const [plotDays, setPlotDays] = useState(7);
+    const [plotHours, setPlotHours] = useState<PlotHours>('all');
 
     const eastboundContainerRef = useRef<HTMLDivElement>(null);
     const westboundContainerRef = useRef<HTMLDivElement>(null);
-    const groomedRouteData = routeData
+    const timespanGroomedRouteData = routeData
         .map(routeDatum => {
             return {
                 ...routeDatum,
@@ -65,14 +90,57 @@ export function Main({ routeData }: { routeData: RouteTime[] }) {
             }
         })
         .filter(routeDatum => DateTime.now().minus({ days: plotDays }).toMillis() < parseInt(routeDatum.unixMilliseconds))
-    const eastBoundRouteData = groomedRouteData.filter(routeDatum => routeDatum.direction === "eastbound")
-    const westBoundRouteData = groomedRouteData.filter(routeDatum => routeDatum.direction === "westbound")
+    const eastTimespanGroomedRouteData = timespanGroomedRouteData.filter(routeDatum => routeDatum.direction === "eastbound");
+    const westTimespanGroomedRouteData = timespanGroomedRouteData.filter(routeDatum => routeDatum.direction === "westbound");
+
+    const dayReduce = (acc: { [date: string]: EnhancedRouteTime[] }, datum: EnhancedRouteTime) => {
+        const date = DateTime.fromJSDate(datum.routeDateTime).toLocaleString(DateTime.DATE_SHORT);
+        acc[date] = acc[date] || [];
+        acc[date].push(datum);
+        return acc;
+    }
+
+    const hourReduce = (acc: EnhancedRouteTime[], datum: EnhancedRouteTime[]): EnhancedRouteTime[] => {
+        if (plotHours === 'all') {
+            return acc.concat(datum);
+        }
+        const slowestHour = datum.reduce((acc, routeDatum) => {
+            if (routeDatum.routeSeconds > acc.routeSeconds) return routeDatum;
+            return acc;
+        });
+        const fastestHour = datum.reduce((acc, routeDatum) => {
+            if (routeDatum.routeSeconds < acc.routeSeconds) return routeDatum;
+            return acc;
+        });
+        switch (plotHours) {
+            case 'slowest': {
+                return acc.concat(slowestHour);
+            }
+            case 'fastest': {
+                return acc.concat(fastestHour);
+            }
+            case 'difference': {
+                const difference = slowestHour.routeSeconds - fastestHour.routeSeconds;
+                const differenceRouteTime: EnhancedRouteTime = {
+                    ...slowestHour,
+                    routeSeconds: difference,
+                    routeMinutes: difference / 60,
+                }
+                return acc.concat(differenceRouteTime);
+            }
+        }
+    }
+
+    const eastBoundRouteData = Object.values(eastTimespanGroomedRouteData
+        .reduce(dayReduce, {}))
+        .reduce(hourReduce, []);
+    const westBoundRouteData = Object.values(westTimespanGroomedRouteData
+        .reduce(dayReduce, {}))
+        .reduce(hourReduce, []);
 
     useEffect(() => {
-        // console.log(eastBoundRouteData);
-        // if (eastBoundRouteData === undefined) return;
-        const eastBoundPlot = getPlot(eastBoundRouteData);
-        const westBoundPlot = getPlot(westBoundRouteData);
+        const eastBoundPlot = getPlot(eastBoundRouteData, plotHours);
+        const westBoundPlot = getPlot(westBoundRouteData, plotHours);
         if (eastboundContainerRef.current) {
             eastboundContainerRef.current.append(eastBoundPlot);
         }
@@ -94,11 +162,11 @@ export function Main({ routeData }: { routeData: RouteTime[] }) {
                 </header>
                 <div ref={eastboundContainerRef} className="space-y-3 px-4">
                     <h2 className="text-xl font-bold text-center">Eastbound</h2>
-                    <PlotButtons currentDays={plotDays} setPlotDays={setPlotDays} />
+                    <PlotButtons currentDays={plotDays} setPlotDays={setPlotDays} currentHours={plotHours} setPlotHours={setPlotHours} />
                 </div>
                 <div ref={westboundContainerRef} className="space-y-3 px-4">
                     <p className="text-xl font-bold text-center">Westbound</p>
-                    <PlotButtons currentDays={plotDays} setPlotDays={setPlotDays} />
+                    <PlotButtons currentDays={plotDays} setPlotDays={setPlotDays} currentHours={plotHours} setPlotHours={setPlotHours} />
                 </div>
                 <div className="space-y-3">
                     <p>Walking speed is about 3 mph. Route times for each direction are queried every hour using the <a href="https://developers.google.com/maps/documentation/routes" target="_blank">Google Maps Routes API</a>. These times are calculated for cars, but a bus making stops would travel even more slowly.</p>
