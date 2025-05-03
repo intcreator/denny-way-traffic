@@ -36,7 +36,7 @@ npm run build
 
 Run from the parent folder.
 
-### DIY Deployment
+### Bare Metal Deployment
 
 The built-in app server is production-ready.
 
@@ -44,7 +44,7 @@ Deploy the output of `npm run build`
 
 ```
 ├── package.json
-├── package-lock.json (or pnpm-lock.yaml, or bun.lockb)
+├── package-lock.json
 ├── build/
 │   ├── client/    # Static assets
 │   └── server/    # Server-side code

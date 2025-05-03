@@ -18,6 +18,8 @@ export function meta({ }: Route.MetaArgs) {
         { property: "og:description", content: description },
         { property: "og:title", content: title },
         { property: "og:image", content: "/denny-way-traffic-thumbnail.png" },
+        { property: "twitter:image", content: "/denny-way-traffic-thumbnail.png" },
+        { property: "twitter:card", content: "summary_large_image" },
     ];
 }
 
