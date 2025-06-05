@@ -20,7 +20,7 @@ const getPlot = (routeData: RouteTime[], plotHours: PlotHours) => {
                 const newObj = {
                     ...cur,
                     routeDateTime: new Date(Number(cur.unixMilliseconds)),
-                    fill: `url(#${hatchingId}${cur.closedBlocks})`,
+                    fill: `url(#${hatchingId}${Math.trunc((cur.closedBlocks || 0) / 1.7)})`,
                 }
                 if (cur.closedLanes && cur.closedLanes >= minClosedLanes) {
                     const previousGroup = acc[acc.length - 1];

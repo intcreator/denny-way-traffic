@@ -35,53 +35,65 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <body className="p-3">
                 <svg width="0" height="0">
                     <defs>
-                        <pattern id="leftRightHatch1" patternUnits="userSpaceOnUse" width="8" height="8">
+                        <pattern id="leftRightHatch0" patternUnits="userSpaceOnUse" width="8" height="8">
                             <path d="M-2,2 l4,-4
                                     M0,8 l8,-8
                                     M6,10 l4,-4"
                                 style={{ stroke: "red", strokeWidth: 1.3 }} />
+                        </pattern>
+                        <pattern id="leftRightHatch1" patternUnits="userSpaceOnUse" width="8" height="8">
+                            <path d="M-2,2 l4,-4
+                                    M0,8 l8,-8
+                                    M6,10 l4,-4"
+                                style={{ stroke: "red", strokeWidth: 2.3 }} />
                         </pattern>
                         <pattern id="leftRightHatch2" patternUnits="userSpaceOnUse" width="8" height="8">
                             <path d="M-2,2 l4,-4
                                     M0,8 l8,-8
                                     M6,10 l4,-4"
-                                style={{ stroke: "red", strokeWidth: 2.3 }} />
+                                style={{ stroke: "red", strokeWidth: 3.3 }} />
                         </pattern>
                         <pattern id="leftRightHatch3" patternUnits="userSpaceOnUse" width="8" height="8">
                             <path d="M-2,2 l4,-4
                                     M0,8 l8,-8
                                     M6,10 l4,-4"
-                                style={{ stroke: "red", strokeWidth: 3.3 }} />
+                                style={{ stroke: "red", strokeWidth: 4.3 }} />
                         </pattern>
-                        <pattern id="leftRightHatch4" patternUnits="userSpaceOnUse" width="8" height="8">
+                        <pattern id="leftRightHatch3" patternUnits="userSpaceOnUse" width="8" height="8">
                             <path d="M-2,2 l4,-4
                                     M0,8 l8,-8
                                     M6,10 l4,-4"
-                                style={{ stroke: "red", strokeWidth: 4.3 }} />
+                                style={{ stroke: "red", strokeWidth: 5 }} />
                         </pattern>
-                        <pattern id="rightLeftHatch1" patternUnits="userSpaceOnUse" width="8" height="8">
+                        <pattern id="rightLeftHatch0" patternUnits="userSpaceOnUse" width="8" height="8">
                             <path d="M-2,6 l4,4
                                     M0,0 l8,8
                                     M6,-2 l4,4"
                                 style={{ stroke: "red", strokeWidth: 1.3 }} />
                         </pattern>
-                        <pattern id="rightLeftHatch2" patternUnits="userSpaceOnUse" width="8" height="8">
+                        <pattern id="rightLeftHatch1" patternUnits="userSpaceOnUse" width="8" height="8">
                             <path d="M-2,6 l4,4
                                     M0,0 l8,8
                                     M6,-2 l4,4"
                                 style={{ stroke: "red", strokeWidth: 2.3 }} />
                         </pattern>
-                        <pattern id="rightLeftHatch3" patternUnits="userSpaceOnUse" width="8" height="8">
+                        <pattern id="rightLeftHatch2" patternUnits="userSpaceOnUse" width="8" height="8">
                             <path d="M-2,6 l4,4
                                     M0,0 l8,8
                                     M6,-2 l4,4"
                                 style={{ stroke: "red", strokeWidth: 3.3 }} />
                         </pattern>
-                        <pattern id="rightLeftHatch4" patternUnits="userSpaceOnUse" width="8" height="8">
+                        <pattern id="rightLeftHatch3" patternUnits="userSpaceOnUse" width="8" height="8">
                             <path d="M-2,6 l4,4
                                     M0,0 l8,8
                                     M6,-2 l4,4"
                                 style={{ stroke: "red", strokeWidth: 4.3 }} />
+                        </pattern>
+                        <pattern id="rightLeftHatch4" patternUnits="userSpaceOnUse" width="8" height="8">
+                            <path d="M-2,6 l4,4
+                                    M0,0 l8,8
+                                    M6,-2 l4,4"
+                                style={{ stroke: "red", strokeWidth: 5 }} />
                         </pattern>
                     </defs>
                 </svg>
