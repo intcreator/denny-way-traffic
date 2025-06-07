@@ -118,6 +118,13 @@ function HourPlotButton({ children, hoursToSet, currentHours, setPlotHours }: { 
     )
 }
 
+const hourModeMap: { [key in PlotHours]: string } = {
+    all: "All hours",
+    slowest: "Slowest hour",
+    fastest: "Fastest hour",
+    difference: "Difference",
+}
+
 function PlotButtons({ currentDays, setPlotDays, currentHours, setPlotHours }: { currentDays: number, setPlotDays: Dispatch<SetStateAction<number>>, currentHours: PlotHours, setPlotHours: Dispatch<SetStateAction<PlotHours>> }) {
     return (
         <div className="lg:flex space-y-2 justify-between">
@@ -127,10 +134,10 @@ function PlotButtons({ currentDays, setPlotDays, currentHours, setPlotHours }: {
                 <DayPlotButton daysToSet={999} currentDays={currentDays} setPlotDays={setPlotDays}>All days</DayPlotButton>
             </div>
             <div className="flex">
-                <HourPlotButton hoursToSet={'all'} currentHours={currentHours} setPlotHours={setPlotHours}>All hours</HourPlotButton>
-                <HourPlotButton hoursToSet={'slowest'} currentHours={currentHours} setPlotHours={setPlotHours}>Slowest hour</HourPlotButton>
-                <HourPlotButton hoursToSet={'fastest'} currentHours={currentHours} setPlotHours={setPlotHours}>Fastest hour</HourPlotButton>
-                <HourPlotButton hoursToSet={'difference'} currentHours={currentHours} setPlotHours={setPlotHours}>Difference</HourPlotButton>
+                <HourPlotButton hoursToSet={'all'} currentHours={currentHours} setPlotHours={setPlotHours}>{hourModeMap["all"]}</HourPlotButton>
+                <HourPlotButton hoursToSet={'slowest'} currentHours={currentHours} setPlotHours={setPlotHours}>{hourModeMap["slowest"]}</HourPlotButton>
+                <HourPlotButton hoursToSet={'fastest'} currentHours={currentHours} setPlotHours={setPlotHours}>{hourModeMap["fastest"]}</HourPlotButton>
+                {/* <HourPlotButton hoursToSet={'difference'} currentHours={currentHours} setPlotHours={setPlotHours}>{hourModeMap["difference"]}</HourPlotButton> */}
             </div>
         </div>
     )
@@ -163,7 +170,6 @@ export function Main({ routeData }: { routeData: RouteTime[] }) {
             }
             nullPaddedRouteData.push(routeDatum);
         }
-        // console.log(nullPaddedRouteData)
         return nullPaddedRouteData;
     }
 
@@ -198,14 +204,18 @@ export function Main({ routeData }: { routeData: RouteTime[] }) {
         if (plotHours === 'all') {
             return acc.concat(datum);
         }
-        const slowestHour = datum.reduce((acc, routeDatum) => {
-            if (routeDatum.routeSeconds > acc.routeSeconds) return routeDatum;
-            return acc;
-        });
-        const fastestHour = datum.reduce((acc, routeDatum) => {
-            if (routeDatum.routeSeconds < acc.routeSeconds) return routeDatum;
-            return acc;
-        });
+        const slowestHour = datum
+            .filter(routeDatum => !isNaN(routeDatum.routeSeconds))
+            .reduce((acc, routeDatum) => {
+                if (routeDatum.routeSeconds > acc.routeSeconds) return routeDatum;
+                return acc;
+            });
+        const fastestHour = datum
+            .filter(routeDatum => !isNaN(routeDatum.routeSeconds))
+            .reduce((acc, routeDatum) => {
+                if (routeDatum.routeSeconds < acc.routeSeconds) return routeDatum;
+                return acc;
+            });
         switch (plotHours) {
             case 'slowest': {
                 return acc.concat(slowestHour);
@@ -231,6 +241,11 @@ export function Main({ routeData }: { routeData: RouteTime[] }) {
     const westBoundRouteData = Object.values(westTimespanGroomedRouteData
         .reduce(dayReduce, {}))
         .reduce(hourReduce, []);
+    const maxClosedBlocks = [...eastBoundRouteData, ...westBoundRouteData]
+        .filter(datum => typeof datum.closedBlocks === "number" && !isNaN(datum.closedBlocks))
+        .reduce((acc, cur) => {
+            return (cur.closedBlocks as number) > acc ? (cur.closedBlocks as number) : acc;
+        }, 0);
 
     useEffect(() => {
         const eastBoundPlot = getPlot(eastBoundRouteData, plotHours);
@@ -264,6 +279,48 @@ export function Main({ routeData }: { routeData: RouteTime[] }) {
                 </div>
                 <div className="space-y-3">
                     <p>Walking speed is about 3 mph. Route times for each direction are queried every hour using the <a href="https://developers.google.com/maps/documentation/routes" target="_blank">Google Maps Routes API</a>. These times are calculated for cars, but a bus making stops would travel even more slowly.</p>
+                    <p>Here is a table showing the effect that lane closures have on travel times, depending on how many blocks are closed:</p>
+                    <PlotButtons currentDays={plotDays} setPlotDays={setPlotDays} currentHours={plotHours} setPlotHours={setPlotHours} />
+                    <table className="mx-auto table-auto border-collapse border border-l8-yellow border-4">
+                        <thead>
+                            <tr>
+                                <th className="px-3 py-1">Direction</th>
+                                <th colSpan={maxClosedBlocks + 1} className="px-3 py-1">Average trip times per blocks of one-lane closures ({hourModeMap[plotHours]})</th>
+                            </tr>
+                            <tr>
+                                <th></th>
+                                {
+                                    Array.from({ length: maxClosedBlocks + 1 }, (_, i) => (
+                                        <th key={i} className="px-3 py-1 text-left">{i} block{i !== 1 ? "s" : ""}</th>
+                                    ))
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td className="px-3 py-1"><strong>Eastbound</strong></td>
+                                {
+                                    Array.from({ length: maxClosedBlocks + 1 }, (_, i) => {
+                                        const averageTime = eastBoundRouteData
+                                            .filter(datum => datum.closedBlocks === i && typeof datum.closedLanes === "number" && datum.closedLanes <= 1 && typeof datum.routeMinutes === "number" && !isNaN(datum.routeMinutes))
+                                            .reduce((acc, cur) => acc + (cur.routeMinutes as number), 0) / eastBoundRouteData.filter(datum => datum.closedBlocks === i && typeof datum.closedLanes === "number" && datum.closedLanes <= 1).length;
+                                        return <td key={i} className="px-3 py-1">{isNaN(averageTime) ? "N/A" : `${Math.round(averageTime)} min`}</td>
+                                    })
+                                }
+                            </tr>
+                            <tr>
+                                <td className="px-3 py-1"><strong>Westbound</strong></td>
+                                {
+                                    Array.from({ length: maxClosedBlocks + 1 }, (_, i) => {
+                                        const averageTime = westBoundRouteData
+                                            .filter(datum => datum.closedBlocks === i && typeof datum.closedLanes === "number" && datum.closedLanes <= 1 && typeof datum.routeMinutes === "number" && !isNaN(datum.routeMinutes))
+                                            .reduce((acc, cur) => acc + (cur.routeMinutes as number), 0) / westBoundRouteData.filter(datum => datum.closedBlocks === i && typeof datum.closedLanes === "number" && datum.closedLanes <= 1).length;
+                                        return <td key={i} className="px-3 py-1">{isNaN(averageTime) ? "N/A" : `${Math.round(averageTime)} min`}</td>
+                                    })
+                                }
+                            </tr>
+                        </tbody>
+                    </table>
                     <p>This project was made to illustrate how helpful it would be for King County Metro Route 8 to have dedicated bus lanes on Denny Way. Learn more about Route 8's issues and how to fix them <a href="https://fixthel8.com/" target="_blank">here</a>.</p>
                 </div>
                 <footer className="text-gray-300 text-sm">
