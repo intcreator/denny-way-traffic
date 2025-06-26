@@ -65,6 +65,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
                                     M6,10 l4,-4"
                                 style={{ stroke: "red", strokeWidth: 5 }} />
                         </pattern>
+                        <pattern id="leftRightHatchBlack" patternUnits="userSpaceOnUse" width="8" height="8">
+                            <path d="M-2,2 l4,-4
+                                    M0,8 l8,-8
+                                    M6,10 l4,-4"
+                                style={{ stroke: "black", strokeWidth: 1 }} />
+                        </pattern>
                         <pattern id="rightLeftHatch0" patternUnits="userSpaceOnUse" width="8" height="8">
                             <path d="M-2,6 l4,4
                                     M0,0 l8,8

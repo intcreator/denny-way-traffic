@@ -113,7 +113,7 @@ const getRouteTimeFromGoogleMaps = async (direction: Direction) => {
     }
 }
 
-const hourlyJob = async () => {
+export const hourlyJob = async () => {
     const unixMilliseconds = Date.now();
     const eastboundRouteSeconds = await getRouteTimeFromGoogleMaps('eastbound');
     // const eastboundRouteSeconds = 1;

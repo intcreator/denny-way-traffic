@@ -8,12 +8,13 @@ type PlotHours = 'all' | 'slowest' | 'fastest' | 'difference';
 type EnhancedRouteTime = RouteTime & {
     routeMinutes: number | null,
     routeDateTime: Date,
+    estimated?: boolean,
 }
 
 const l8Yellow = "#e8b929";
 const routeMiles = 1.09;
 
-const getPlot = (routeData: RouteTime[], plotHours: PlotHours) => {
+const getPlot = (routeData: EnhancedRouteTime[], plotHours: PlotHours) => {
     const groupRouteData = (routeDataToGroup: RouteTime[], hatchingId: string, minClosedLanes: number) => {
         return routeDataToGroup
             .reduce((acc, cur) => {
@@ -47,6 +48,35 @@ const getPlot = (routeData: RouteTime[], plotHours: PlotHours) => {
     }
     const oneLaneClosureData = groupRouteData(routeData, "rightLeftHatch", 1);
     const twoLaneClosureData = groupRouteData(routeData, "leftRightHatch", 2);
+    const estimatedMissingHoursData = routeData
+        .reduce((acc, cur) => {
+            const newObj = {
+                ...cur,
+                routeDateTime: new Date(Number(cur.unixMilliseconds)),
+                fill: `url(#leftRightHatchBlack)`,
+            }
+            if (cur && cur.estimated) {
+                const previousGroup = acc[acc.length - 1];
+                const previousGroupedItem = previousGroup?.[previousGroup.length - 1];
+                if (previousGroupedItem && previousGroupedItem.estimated
+                    && Math.trunc(parseInt(previousGroupedItem?.unixMilliseconds) / 1000 / 60 / 60) + 1 === Math.trunc(parseInt(cur.unixMilliseconds) / 1000 / 60 / 60)) {
+                    return [
+                        ...acc.slice(0, -1),
+                        [
+                            ...acc[acc.length - 1],
+                            newObj,
+                        ]
+                    ]
+                }
+                else {
+                    return [
+                        ...acc,
+                        [newObj]
+                    ];
+                }
+            }
+            return acc;
+        }, [] as (EnhancedRouteTime & { routeDateTime: Date; fill: string })[][]);
 
     return Plot.plot({
         width: 1000,
@@ -54,6 +84,16 @@ const getPlot = (routeData: RouteTime[], plotHours: PlotHours) => {
         y: { grid: true },
         marks: [
             Plot.areaY(routeData, { x: "routeDateTime", y: "routeMinutes", fill: l8Yellow }),
+            ...estimatedMissingHoursData.map((cur) => {
+                return Plot.areaY(
+                    cur,
+                    {
+                        x: "routeDateTime",
+                        y: "routeMinutes",
+                        fill: "fill",
+                    }
+                )
+            }),
             ...oneLaneClosureData.map((cur) => {
                 return Plot.areaY(
                     cur,
@@ -84,6 +124,7 @@ const getPlot = (routeData: RouteTime[], plotHours: PlotHours) => {
                     `Duration${plotHours === 'difference' ? ' difference' : ''}: ${Math.round(d.routeMinutes)} min`,
                     plotHours !== 'difference' ? `Speed: ${Math.round(60 / d.routeMinutes * routeMiles)} mph` : null,
                     d.closedLanes && d.closedBlocks ? `${d.closedLanes} lane${d.closedLanes === 1 ? '' : 's'} closed for ${d.closedBlocks} block${d.closedBlocks === 1 ? '' : 's'}` : null,
+                    d.estimated ? "(estimated; data is missing)" : null,
                 ].filter(Boolean).join("\n"),
             })),
             Plot.axisY({ anchor: "left", label: "Route Duration (minutes)", labelAnchor: "center", interval: 1 }),
@@ -143,41 +184,74 @@ function PlotButtons({ currentDays, setPlotDays, currentHours, setPlotHours }: {
     )
 }
 
+const eastboundAverageHourlyTravelTimes: { [key: string]: number[] } = {};
+const westboundAverageHourlyTravelTimes: { [key: string]: number[] } = {};
+
+const averageTravelTimeAtDayOfWeekAndHour = (routeData: RouteTime[], dayOfWeek: string, hour: number) => {
+    const filteredData = routeData.filter(datum => {
+        const dateTime = DateTime.fromMillis(Number(datum.unixMilliseconds));
+        return dateTime.weekdayShort === dayOfWeek && dateTime.hour === hour;
+    });
+    if (filteredData.length === 0) return NaN;
+    return filteredData.reduce((acc, cur) => acc + (cur.routeSeconds || 0), 0) / filteredData.length;
+}
+
+let routeDataLength = 0;
+
+const populateAverageTravelTimes = (routeData: RouteTime[]) => {
+    // avoid re-populating if the data hasn't changed
+    if (routeDataLength === routeData.length) return;
+    routeDataLength = routeData.length;
+    const daysOfWeek = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    for (const day of daysOfWeek) {
+        eastboundAverageHourlyTravelTimes[day] = [];
+        westboundAverageHourlyTravelTimes[day] = [];
+        for (let hour = 0; hour < 24; hour++) {
+            eastboundAverageHourlyTravelTimes[day][hour] = averageTravelTimeAtDayOfWeekAndHour(routeData.filter(datum => datum.direction === "eastbound"), day, hour);
+            westboundAverageHourlyTravelTimes[day][hour] = averageTravelTimeAtDayOfWeekAndHour(routeData.filter(datum => datum.direction === "westbound"), day, hour);
+        }
+    }
+}
+
 export function Main({ routeData }: { routeData: RouteTime[] }) {
     const [plotDays, setPlotDays] = useState(7);
     const [plotHours, setPlotHours] = useState<PlotHours>('all');
 
     const eastboundContainerRef = useRef<HTMLDivElement>(null);
     const westboundContainerRef = useRef<HTMLDivElement>(null);
-    const nullPadRouteData = (routeDataToNullPad: RouteTime[]) => {
-        let nullPaddedRouteData = [];
-        for (let i = 0; i < routeDataToNullPad.length; i++) {
-            const routeDatum = routeDataToNullPad[i];
+    populateAverageTravelTimes(routeData)
+    const estimatePadRouteData = (routeDataToEstimatePad: RouteTime[]) => {
+        let estimatePaddedRouteData = [];
+        for (let i = 0; i < routeDataToEstimatePad.length; i++) {
+            const routeDatum = routeDataToEstimatePad[i];
             if (i > 0) {
-                const previousRouteDatum = routeDataToNullPad[i - 1];
+                const previousRouteDatum = routeDataToEstimatePad[i - 1];
                 const previousDateTime = DateTime.fromJSDate(new Date(parseInt(previousRouteDatum.unixMilliseconds)));
                 const currentDateTime = DateTime.fromJSDate(new Date(parseInt(routeDatum.unixMilliseconds)));
                 const differenceInHours = Math.trunc(Math.abs(currentDateTime.diff(previousDateTime, 'hours').hours));
                 if (differenceInHours > 1) {
                     for (let j = 1; j < differenceInHours; j++) {
-                        nullPaddedRouteData.push({
-                            unixMilliseconds: `${parseInt(previousRouteDatum.unixMilliseconds) + j * 60 * 60 * 1000}`,
-                            routeSeconds: NaN,
+                        const jUnixMilliseconds = parseInt(previousRouteDatum.unixMilliseconds) + j * 60 * 60 * 1000;
+                        const jDateTime = DateTime.fromMillis(jUnixMilliseconds);
+                        estimatePaddedRouteData.push({
+                            unixMilliseconds: `${jUnixMilliseconds}`,
+                            routeSeconds: routeDatum.direction === "eastbound" ? eastboundAverageHourlyTravelTimes[jDateTime.weekdayShort as string][jDateTime.hour] : westboundAverageHourlyTravelTimes[jDateTime.weekdayShort as string][jDateTime.hour],
                             direction: routeDatum.direction,
+                            estimated: true,
                         });
                     }
                 }
             }
-            nullPaddedRouteData.push(routeDatum);
+            estimatePaddedRouteData.push(routeDatum);
         }
-        return nullPaddedRouteData;
+        return estimatePaddedRouteData;
     }
 
-    // First, filter and null-pad the raw RouteTime data
+    // First, filter and estimate-pad the raw RouteTime data
     const timespanFilteredRouteData = routeData
         .filter(routeDatum => DateTime.now().minus({ days: plotDays }).toMillis() < parseInt(routeDatum.unixMilliseconds));
-    const eastTimespanFilteredRouteData = nullPadRouteData(timespanFilteredRouteData.filter(routeDatum => routeDatum.direction === "eastbound"));
-    const westTimespanFilteredRouteData = nullPadRouteData(timespanFilteredRouteData.filter(routeDatum => routeDatum.direction === "westbound"));
+    const eastTimespanFilteredRouteData = estimatePadRouteData(timespanFilteredRouteData.filter(routeDatum => routeDatum.direction === "eastbound"));
+    const westTimespanFilteredRouteData = estimatePadRouteData(timespanFilteredRouteData.filter(routeDatum => routeDatum.direction === "westbound"));
 
     // Then, map to EnhancedRouteTime (with routeMinutes and routeDateTime)
     const eastTimespanGroomedRouteData: EnhancedRouteTime[] = eastTimespanFilteredRouteData
@@ -301,9 +375,10 @@ export function Main({ routeData }: { routeData: RouteTime[] }) {
                                 <td className="px-3 py-1"><strong>Eastbound</strong></td>
                                 {
                                     Array.from({ length: maxClosedBlocks + 1 }, (_, i) => {
-                                        const averageTime = eastBoundRouteData
-                                            .filter(datum => datum.closedBlocks === i && typeof datum.closedLanes === "number" && datum.closedLanes <= 1 && typeof datum.routeMinutes === "number" && !isNaN(datum.routeMinutes))
-                                            .reduce((acc, cur) => acc + (cur.routeMinutes as number), 0) / eastBoundRouteData.filter(datum => datum.closedBlocks === i && typeof datum.closedLanes === "number" && datum.closedLanes <= 1).length;
+                                        const eastBoundRouteDataSamples = eastBoundRouteData
+                                            .filter(datum => datum.closedBlocks === i && typeof datum.closedLanes === "number" && datum.closedLanes <= 1 && typeof datum.routeMinutes === "number" && !isNaN(datum.routeMinutes) && !datum.estimated)
+                                        const averageTime = eastBoundRouteDataSamples
+                                            .reduce((acc, cur) => acc + (cur.routeMinutes as number), 0) / eastBoundRouteDataSamples.length;
                                         return <td key={i} className="px-3 py-1">{isNaN(averageTime) ? "N/A" : `${Math.round(averageTime)} min`}</td>
                                     })
                                 }
@@ -312,9 +387,10 @@ export function Main({ routeData }: { routeData: RouteTime[] }) {
                                 <td className="px-3 py-1"><strong>Westbound</strong></td>
                                 {
                                     Array.from({ length: maxClosedBlocks + 1 }, (_, i) => {
-                                        const averageTime = westBoundRouteData
-                                            .filter(datum => datum.closedBlocks === i && typeof datum.closedLanes === "number" && datum.closedLanes <= 1 && typeof datum.routeMinutes === "number" && !isNaN(datum.routeMinutes))
-                                            .reduce((acc, cur) => acc + (cur.routeMinutes as number), 0) / westBoundRouteData.filter(datum => datum.closedBlocks === i && typeof datum.closedLanes === "number" && datum.closedLanes <= 1).length;
+                                        const westBoundRouteDataSamples = westBoundRouteData
+                                            .filter(datum => datum.closedBlocks === i && typeof datum.closedLanes === "number" && datum.closedLanes <= 1 && typeof datum.routeMinutes === "number" && !isNaN(datum.routeMinutes) && !datum.estimated)
+                                        const averageTime = westBoundRouteDataSamples
+                                            .reduce((acc, cur) => acc + (cur.routeMinutes as number), 0) / westBoundRouteDataSamples.length;
                                         return <td key={i} className="px-3 py-1">{isNaN(averageTime) ? "N/A" : `${Math.round(averageTime)} min`}</td>
                                     })
                                 }

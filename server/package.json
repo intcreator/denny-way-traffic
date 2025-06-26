@@ -9,6 +9,7 @@
         "start": "npx tsx --env-file=.env.production --watch index.ts",
         "dev": "npx tsx --env-file=.env --watch index.ts",
         "closures": "npx tsx --env-file=.env --watch addClosuresToDB.ts",
+        "runManually": "npx tsx --env-file=.env runManually.ts",
         "test": "npx tsx --env-file=.env --watch testRoutesApi.ts"
     },
     "dependencies": {
