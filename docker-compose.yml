@@ -32,6 +32,9 @@ services:
             - 3306:3306
         # expose:
         #     - "3306"
+        volumes:
+            - denny-way-traffic-db-data:/var/lib/mysql
+            # - ./server/init.sql:/docker-entrypoint-initdb.d/init.sql
         env_file:
             - ./server/.env.production
         networks:
@@ -59,3 +62,8 @@ networks:
     reverse-proxy_reverse-proxy:
         external: true
     denny:
+
+
+volumes:
+    denny-way-traffic-db-data:
+        external: true
