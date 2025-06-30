@@ -3,6 +3,7 @@ import * as Plot from "@observablehq/plot";
 import { DateTime } from "luxon";
 // import * as d3 from "d3";
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useRevalidator } from "react-router";
 
 type PlotHours = 'all' | 'slowest' | 'fastest' | 'difference';
 type EnhancedRouteTime = RouteTime & {
@@ -79,7 +80,7 @@ const getPlot = (routeData: EnhancedRouteTime[], plotHours: PlotHours, maxRouteM
         }, [] as (EnhancedRouteTime & { routeDateTime: Date; fill: string })[][]);
 
     return Plot.plot({
-        width: 1000,
+        width: 950,
         marginBottom: 50,
         y: { grid: true, domain: [0, maxRouteMinutes] },
         marks: [
@@ -196,6 +197,15 @@ function PlotButtons({ currentDays, setPlotDays, currentHours, setPlotHours }: {
     )
 }
 
+function LiveIndicator() {
+    return (
+        <div className="inline-flex text-white rounded-bl-lg items-center">
+            <div className="w-2.5 h-2.5 bg-green-400 rounded-full mr-1"></div>
+            <span className="text-sm">Live</span>
+        </div>
+    )
+}
+
 const eastboundMedianHourlyTravelTimes: { [key: string]: { medianSeconds: number, listSeconds: number[] }[] } = {};
 const westboundMedianHourlyTravelTimes: { [key: string]: { medianSeconds: number, listSeconds: number[] }[] } = {};
 
@@ -264,6 +274,8 @@ export function Main({ routeData }: { routeData: RouteTime[] }) {
 
     const eastboundContainerRef = useRef<HTMLDivElement>(null);
     const westboundContainerRef = useRef<HTMLDivElement>(null);
+
+    const revalidator = useRevalidator();
 
     const estimatePadRouteData = (routeDataToEstimatePad: RouteTime[]) => {
         populateMedianTravelTimes(routeData);
@@ -374,14 +386,23 @@ export function Main({ routeData }: { routeData: RouteTime[] }) {
             ...westBoundRouteData.map(d => d.routeMinutes ?? 0)
         );
         const eastBoundPlot = getPlot(eastBoundRouteData, plotHours, maxRouteMinutes);
+        eastBoundPlot.style.maxWidth = "none";
         const westBoundPlot = getPlot(westBoundRouteData, plotHours, maxRouteMinutes);
+        westBoundPlot.style.maxWidth = "none";
         if (eastboundContainerRef.current) {
             eastboundContainerRef.current.append(eastBoundPlot);
         }
         if (westboundContainerRef.current) {
             westboundContainerRef.current.append(westBoundPlot);
         }
+        const refreshInterval = setInterval(() => {
+            // refresh on minute one to let the server have a chance to fetch the new data first
+            if (DateTime.now().minute === 1) {
+                revalidator.revalidate();
+            }
+        }, 60 * 1000);
         return () => {
+            clearInterval(refreshInterval);
             eastBoundPlot.remove();
             westBoundPlot.remove();
         }
@@ -394,48 +415,58 @@ export function Main({ routeData }: { routeData: RouteTime[] }) {
                     <h1 className="text-3xl font-medium">Denny Way Traffic History</h1>
                     <p>This is how much time it takes to get from Queen Anne Ave. to Virginia St. (or vice versa) on Denny Way every hour by car. It is a total distance of 1.1 miles.</p>
                 </header>
-                <div ref={eastboundContainerRef} className="space-y-3 px-4 overflow-x-auto w-full">
+                <div className="space-y-3 px-4 w-full">
                     <h2 className="text-xl font-bold text-center">Eastbound</h2>
                     <PlotButtons currentDays={plotDays} setPlotDays={setPlotDays} currentHours={plotHours} setPlotHours={setPlotHours} />
+                    <div className="text-center lg:hidden">⬅ scroll ➡</div>
+                    {/* <LiveIndicator /> */}
+                    <div ref={eastboundContainerRef} className="overflow-x-auto w-full"></div>
                 </div>
-                <div ref={westboundContainerRef} className="space-y-3 px-4 overflow-x-auto w-full">
+                <div className="space-y-3 px-4 w-full">
                     <p className="text-xl font-bold text-center">Westbound</p>
                     <PlotButtons currentDays={plotDays} setPlotDays={setPlotDays} currentHours={plotHours} setPlotHours={setPlotHours} />
+                    <div className="text-center lg:hidden">⬅ scroll ➡</div>
+                    <div ref={westboundContainerRef} className="overflow-x-auto w-full"></div>
+                    {/* <LiveIndicator /> */}
                 </div>
                 <div className="space-y-3 w-full">
                     <p>Walking speed is about 3 mph. Route times for each direction are queried every hour using the <a href="https://developers.google.com/maps/documentation/routes" target="_blank">Google Maps Routes API</a>. These times are calculated for cars, but a bus making stops would travel even more slowly.</p>
                     <p>Here is a table showing the effect that lane closures have on travel times, depending on how many blocks are closed:</p>
                     <PlotButtons currentDays={plotDays} setPlotDays={setPlotDays} currentHours={plotHours} setPlotHours={setPlotHours} />
-                    <table className="mx-auto table-auto border-collapse border border-l8-yellow border-4">
-                        <thead>
-                            <tr>
-                                <th className="px-3 py-1">Direction</th>
-                                <th colSpan={maxClosedBlocks + 1} className="px-3 py-1">Median trip times per blocks of one-lane closures ({hourModeMap[plotHours]})</th>
-                            </tr>
-                            <tr>
-                                <th></th>
-                                {
-                                    Array.from({ length: maxClosedBlocks + 1 }, (_, i) => (
-                                        <th key={i} className="px-3 py-1 text-left">{i} block{i !== 1 ? "s" : ""}</th>
-                                    ))
-                                }
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td className="px-3 py-1"><strong>Eastbound</strong></td>
-                                {
-                                    medianTripTimesPerBlockOfOneLaneClosures(maxClosedBlocks, eastBoundRouteData)
-                                }
-                            </tr>
-                            <tr>
-                                <td className="px-3 py-1"><strong>Westbound</strong></td>
-                                {
-                                    medianTripTimesPerBlockOfOneLaneClosures(maxClosedBlocks, westBoundRouteData)
-                                }
-                            </tr>
-                        </tbody>
-                    </table>
+                    {/* <LiveIndicator /> */}
+                    <div className="text-center md:hidden">⬅ scroll ➡</div>
+                    <div className="overflow-x-auto w-full">
+                        <table className="mx-auto table-auto border-collapse border border-l8-yellow border-4">
+                            <thead>
+                                <tr>
+                                    <th className="px-3 py-1">Direction</th>
+                                    <th colSpan={maxClosedBlocks + 1} className="px-3 py-1">Median trip times per blocks of one-lane closures ({hourModeMap[plotHours]})</th>
+                                </tr>
+                                <tr>
+                                    <th></th>
+                                    {
+                                        Array.from({ length: maxClosedBlocks + 1 }, (_, i) => (
+                                            <th key={i} className="px-3 py-1 text-left">{i} block{i !== 1 ? "s" : ""}</th>
+                                        ))
+                                    }
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td className="px-3 py-1"><strong>Eastbound</strong></td>
+                                    {
+                                        medianTripTimesPerBlockOfOneLaneClosures(maxClosedBlocks, eastBoundRouteData)
+                                    }
+                                </tr>
+                                <tr>
+                                    <td className="px-3 py-1"><strong>Westbound</strong></td>
+                                    {
+                                        medianTripTimesPerBlockOfOneLaneClosures(maxClosedBlocks, westBoundRouteData)
+                                    }
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                     <p>This project was made to illustrate how helpful it would be for King County Metro Route 8 to have dedicated bus lanes on Denny Way. Learn more about Route 8's issues and how to fix them <a href="https://fixthel8.com/" target="_blank">here</a>.</p>
                 </div>
                 <footer className="text-gray-300 text-sm">
