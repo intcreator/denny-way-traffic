@@ -75,6 +75,7 @@ const eastLatLng = {
 // distance is 1756 meters
 
 const getRouteTimeFromGoogleMaps = async (direction: Direction) => {
+    let json;
     try {
         const response = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
             method: 'POST',
@@ -105,11 +106,13 @@ const getRouteTimeFromGoogleMaps = async (direction: Direction) => {
                 "units": "IMPERIAL"
             })
         });
-        const json = await response.json() as GoogleMapsAPIJSON;
+        json = await response.json() as GoogleMapsAPIJSON;
         // console.log(json);
         return parseInt(json.routes[0].duration.slice(0, -1));
     } catch (error) {
-        console.error('Could not make request to Google Maps API', error)
+        console.error('Could not make request to Google Maps API', error);
+        console.log(json);
+        console.log(json?.routes);
     }
 }
 

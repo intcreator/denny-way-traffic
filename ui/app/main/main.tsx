@@ -287,9 +287,9 @@ export function Main({ routeData }: { routeData: RouteTime[] }) {
             const previousRouteDatum = routeDataToEstimatePad[i - 1];
             const previousDateTime = DateTime.fromJSDate(new Date(parseInt(previousRouteDatum.unixMilliseconds)));
             const currentDateTime = DateTime.fromJSDate(new Date(parseInt(routeDatum.unixMilliseconds)));
-            const differenceInHours = Math.trunc(Math.abs(currentDateTime.diff(previousDateTime, 'hours').hours));
+            const differenceInHours = Math.round(Math.abs(currentDateTime.diff(previousDateTime, 'hours').hours));
             if (differenceInHours > 1) {
-                for (let j = 1; j <= differenceInHours; j++) {
+                for (let j = 1; j < differenceInHours; j++) {
                     const jUnixMilliseconds = parseInt(previousRouteDatum.unixMilliseconds) + j * 60 * 60 * 1000;
                     const jDateTime = DateTime.fromMillis(jUnixMilliseconds);
                     const medianHourlyTravelTimes = routeDatum.direction === "eastbound" ? eastboundMedianHourlyTravelTimes : westboundMedianHourlyTravelTimes;
