@@ -1,12 +1,19 @@
 import type { Route } from "./+types/home";
 import { Main } from "../main/main";
+import { DateTime } from "luxon";
 
 const baseURL = import.meta.env.VITE_BASE_URL;
 
 export async function loader() {
+    const initialPlotStartDate = DateTime.now().minus({ days: 7 }).toISODate();
+    const initialPlotEndDate = DateTime.now().toISODate();
     const routeTimesRes = await fetch(`${baseURL}/getRouteTimes`);
-    const routeTimes = await routeTimesRes.json();
-    return routeTimes;
+    const routeData = await routeTimesRes.json();
+    return {
+        initialPlotStartDate,
+        initialPlotEndDate,
+        routeData
+    };
 }
 
 export function meta({ }: Route.MetaArgs) {
@@ -26,5 +33,5 @@ export function meta({ }: Route.MetaArgs) {
 export default function Home({
     loaderData
 }: Route.ComponentProps) {
-    return <Main routeData={loaderData} />;
+    return <Main loaderData={loaderData} />;
 }

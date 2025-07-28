@@ -2,13 +2,17 @@ import type { Direction, RouteTime } from "../../../sharedTypes/routeTimes";
 import * as Plot from "@observablehq/plot";
 import { DateTime } from "luxon";
 // import * as d3 from "d3";
-import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { useRevalidator } from "react-router";
+import { useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { useLoaderData, useRevalidator } from "react-router";
+import DatePicker from "react-datepicker";
+// import "react-datepicker/dist/react-datepicker.css";
+import "../datepicker.css"
 
 type PlotHours = 'all' | 'slowest' | 'fastest' | 'difference';
 type EnhancedRouteTime = RouteTime & {
     routeMinutes: number | null,
-    routeDateTime: Date,
+    routeDate: Date,
+    plotRouteDate: Date,
     estimated?: boolean,
 }
 
@@ -21,7 +25,7 @@ const getPlot = (routeData: EnhancedRouteTime[], plotHours: PlotHours, maxRouteM
             .reduce((acc, cur) => {
                 const newObj = {
                     ...cur,
-                    routeDateTime: new Date(Number(cur.unixMilliseconds)),
+                    routeDate: new Date(Number(cur.unixMilliseconds)),
                     fill: `url(#${hatchingId}${Math.trunc((cur.closedBlocks || 0) / 1.7)})`,
                 }
                 if (cur.closedLanes && cur.closedLanes >= minClosedLanes) {
@@ -45,7 +49,7 @@ const getPlot = (routeData: EnhancedRouteTime[], plotHours: PlotHours, maxRouteM
                     }
                 }
                 return acc;
-            }, [] as (RouteTime & { routeDateTime: Date; fill: string })[][]);
+            }, [] as (RouteTime & { routeDate: Date; fill: string })[][]);
     }
     const oneLaneClosureData = groupRouteData(routeData, "rightLeftHatch", 1);
     const twoLaneClosureData = groupRouteData(routeData, "leftRightHatch", 2);
@@ -53,7 +57,7 @@ const getPlot = (routeData: EnhancedRouteTime[], plotHours: PlotHours, maxRouteM
         .reduce((acc, cur) => {
             const newObj = {
                 ...cur,
-                routeDateTime: new Date(Number(cur.unixMilliseconds)),
+                routeDate: new Date(Number(cur.unixMilliseconds)),
                 fill: `url(#leftRightHatchBlack)`,
             }
             if (cur && cur.estimated) {
@@ -77,19 +81,21 @@ const getPlot = (routeData: EnhancedRouteTime[], plotHours: PlotHours, maxRouteM
                 }
             }
             return acc;
-        }, [] as (EnhancedRouteTime & { routeDateTime: Date; fill: string })[][]);
+        }, [] as (EnhancedRouteTime & { routeDate: Date; fill: string })[][]);
+
+    const tickModulus = Math.floor(routeData.length / 15);
 
     return Plot.plot({
         width: 950,
         marginBottom: 50,
         y: { grid: true, domain: [0, maxRouteMinutes] },
         marks: [
-            Plot.areaY(routeData, { x: "routeDateTime", y: "routeMinutes", fill: l8Yellow }),
+            Plot.areaY(routeData, { x: "plotRouteDate", y: "routeMinutes", fill: l8Yellow }),
             ...estimatedMissingHoursData.map((cur) => {
                 return Plot.areaY(
                     cur,
                     {
-                        x: "routeDateTime",
+                        x: "routeDate",
                         y: "routeMinutes",
                         fill: "fill",
                     }
@@ -99,7 +105,7 @@ const getPlot = (routeData: EnhancedRouteTime[], plotHours: PlotHours, maxRouteM
                 return Plot.areaY(
                     cur,
                     {
-                        x: "routeDateTime",
+                        x: "routeDate",
                         y: "routeMinutes",
                         // stroke: "red",
                         fill: "fill",
@@ -110,18 +116,19 @@ const getPlot = (routeData: EnhancedRouteTime[], plotHours: PlotHours, maxRouteM
                 return Plot.areaY(
                     cur,
                     {
-                        x: "routeDateTime",
+                        x: "routeDate",
                         y: "routeMinutes",
                         // stroke: "red",
                         fill: "fill",
                     }
                 )
             }),
+            // Yale St. closed 7/14-7/21
             Plot.tip(routeData, Plot.pointerX({
-                x: "routeDateTime",
+                x: "plotRouteDate",
                 y: "routeMinutes",
                 title: (d) => [
-                    `${DateTime.fromJSDate(d.routeDateTime).toFormat("ccc, LLL d 'at' h a")}`,
+                    `${DateTime.fromJSDate(d.routeDate).toFormat("ccc, LLL d 'at' h a")}`,
                     `Duration${plotHours === 'difference' ? ' difference' : ''}: ${Math.round(d.routeMinutes)} min`,
                     plotHours !== 'difference' ? `Speed: ${Math.round(60 / d.routeMinutes * routeMiles)} mph` : null,
                     d.closedLanes && d.closedBlocks ? `${d.closedLanes} lane${d.closedLanes === 1 ? '' : 's'} closed for ${d.closedBlocks} block${d.closedBlocks === 1 ? '' : 's'}` : null,
@@ -139,26 +146,48 @@ const getPlot = (routeData: EnhancedRouteTime[], plotHours: PlotHours, maxRouteM
                 anchor: "bottom",
                 label: "Route Date and Time",
                 labelAnchor: "center",
-                ticks: 20,
-                labelOffset: 50
+                ticks: routeData
+                    // .map(datum => datum.plotRouteDate),
+                    .reduce<Date[]>((acc, cur, index) => {
+                        if (index !== 0 && index % tickModulus === 0 && index !== routeData.length - 1) {
+                            if (index > 0 && routeData[index].plotRouteDate.getDate() === routeData[index - 1].plotRouteDate.getDate()) {
+                                return [...acc, cur.plotRouteDate];
+                            }
+                            return [...acc, cur.plotRouteDate]
+                        }
+                        return acc;
+                    }, []),
+                labelOffset: 50,
+                tickFormat: (d) => {
+                    if (plotHours === "all" && DateTime.fromJSDate(routeData.slice(-1)[0].plotRouteDate).diff(DateTime.fromJSDate(routeData[0].plotRouteDate), 'days').days < 4) {
+                        if (d.includeTickDate) {
+                            return DateTime.fromJSDate(d)
+                                .toFormat("h a\nLLL d");
+                        }
+                        return DateTime.fromJSDate(d)
+                            .toFormat("h a");
+                    }
+                    return DateTime.fromJSDate(d)
+                        .toFormat("LLL d");
+                }
             }),
         ],
     });
 }
 
-function Button({ children, onClick, active = false }: { children: string, onClick: () => void, active?: boolean }) {
+function Button({ children, onClick, active = false, className = "", ref = null }: { children: string, onClick: () => void, active?: boolean, className?: string, ref?: React.Ref<HTMLButtonElement> }) {
     return (
-        <button className={`bg-l8-yellow text-black border-4 ${active ? 'border-amber-800' : 'border-l8-yellow'} hover:bg-amber-500 rounded-xl cursor-pointer mr-2 py-2 px-3`} onClick={onClick}>{children}</button>
+        <button ref={ref} className={`bg-l8-yellow text-black border-4 ${active ? 'border-amber-800' : 'border-l8-yellow'} hover:bg-amber-500 rounded-xl cursor-pointer py-2 px-3 ${className}`} onClick={onClick}>{children}</button>
     )
 }
 
-function DayPlotButton({ children, daysToSet, currentDays, setPlotDays }: { children: string, daysToSet: number, currentDays: number, setPlotDays: Dispatch<SetStateAction<number>> }) {
+function DayPlotButton({ children, daysToSet, startDate, endDate, setPlotDates, className = '' }: { children: string, daysToSet: number, startDate: DateTime | null, endDate: DateTime | null, setPlotDates: (start: DateTime | null, end: DateTime | null) => void, className?: string }) {
     function updatePlotDays() {
-        setPlotDays(daysToSet);
+        setPlotDates(DateTime.now().minus({ days: daysToSet }), DateTime.now());
     }
 
     return (
-        <Button onClick={updatePlotDays} active={currentDays === daysToSet}>{children}</Button>
+        <Button onClick={updatePlotDays} active={!!startDate && !!endDate && endDate.diff(startDate, 'days').as('days') === daysToSet} className={className}>{children}</Button>
     )
 }
 
@@ -172,6 +201,44 @@ function HourPlotButton({ children, hoursToSet, currentHours, setPlotHours }: { 
     )
 }
 
+function Dropdown({ title, children }: { title: string, children: ReactNode }) {
+    const [dropdownOpen, setDropdownOpen] = useState(false);
+    const [dropdownAlignRight, setDropdownAlignRight] = useState(false);
+    const buttonRef = useRef<HTMLButtonElement>(null);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    function toggleDropdown() {
+        setDropdownOpen(!dropdownOpen);
+    }
+
+    function handleBlur(e: React.FocusEvent<HTMLDivElement>) {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+            setDropdownOpen(false);
+        }
+    }
+
+    useEffect(() => {
+        if (dropdownOpen && dropdownRef.current) {
+            const rect = dropdownRef.current.getBoundingClientRect();
+            const parentRect = dropdownRef.current.parentElement?.getBoundingClientRect();
+            if (rect.width + (parentRect?.left ?? 0) > window.innerWidth) {
+                setDropdownAlignRight(true);
+            } else {
+                setDropdownAlignRight(false);
+            }
+        }
+    }, [dropdownOpen]);
+
+    return (
+        <div className="relative" tabIndex={0} onBlur={handleBlur}>
+            <Button ref={buttonRef} className={dropdownOpen ? ' rounded-b-none' : ''} onClick={toggleDropdown}>{title}</Button>
+            <div ref={dropdownRef} style={{ top: `${buttonRef.current?.offsetHeight}px`, right: dropdownAlignRight ? 0 : 'auto' }} className={`absolute min-w-max z-10 bg-white dark:bg-gray-950 border rounded-t-none ${dropdownOpen ? 'block' : 'hidden'} border-4 border-l8-yellow rounded-xl shadow-lg`}>
+                {children}
+            </div>
+        </div>
+    )
+}
+
 const hourModeMap: { [key in PlotHours]: string } = {
     all: "All hours",
     slowest: "Slowest hour each day",
@@ -179,20 +246,60 @@ const hourModeMap: { [key in PlotHours]: string } = {
     difference: "Difference",
 }
 
-function PlotButtons({ currentDays, setPlotDays, currentHours, setPlotHours }: { currentDays: number, setPlotDays: Dispatch<SetStateAction<number>>, currentHours: PlotHours, setPlotHours: Dispatch<SetStateAction<PlotHours>> }) {
+function PlotButtons({ startDate, endDate, minStartDate, maxEndDate, setPlotDates, currentHours, setPlotHours, className = "" }: { startDate: DateTime | null, endDate: DateTime | null, minStartDate: DateTime, maxEndDate: DateTime, setPlotDates: (start: DateTime | null, end: DateTime | null) => void, currentHours: PlotHours, setPlotHours: Dispatch<SetStateAction<PlotHours>>, className?: string }) {
+    // const setStartDate = (date: Date | null) => {
+    //     if (date) setPlotDates(DateTime.fromJSDate(date), endDate);
+    // };
+    // const setEndDate = (date: Date | null) => {
+    //     if (date) setPlotDates(startDate, DateTime.fromJSDate(date));
+    // };
+    const setDates = (dates: [Date | null, Date | null]) => {
+        setPlotDates(
+            dates[0] ? DateTime.fromJSDate(dates[0]) : null,
+            dates[1] ? DateTime.fromJSDate(dates[1]) : null
+        );
+    };
+
     return (
-        <div className="lg:flex space-y-2 justify-between">
-            <div className="flex justify-center">
-                <DayPlotButton daysToSet={7} currentDays={currentDays} setPlotDays={setPlotDays}>Last 7 days</DayPlotButton>
-                <DayPlotButton daysToSet={14} currentDays={currentDays} setPlotDays={setPlotDays}>Last 14 days</DayPlotButton>
-                <DayPlotButton daysToSet={999} currentDays={currentDays} setPlotDays={setPlotDays}>All days</DayPlotButton>
+        <div className={`${className}`}>
+            <div className={`lg:flex space-y-2 justify-between`}>
+                <div className="flex justify-center space-x-2">
+                    <DayPlotButton daysToSet={7} startDate={startDate} endDate={endDate} setPlotDates={setPlotDates}>Last 7 days</DayPlotButton>
+                    <DayPlotButton daysToSet={14} startDate={startDate} endDate={endDate} setPlotDates={setPlotDates}>Last 14 days</DayPlotButton>
+                    <Dropdown title="More options">
+                        <div className="flex flex-col text-center">
+                            <DatePicker className="bg-l8-yellow text-black border-4 border-l8-yellow hover:bg-amber-500 rounded-none cursor-pointer py-2 px-3 block w-full"
+                                // selected={importantDates.startDate.toJSDate()}
+                                // onSelect={setStartDate} //when day is clicked
+                                onChange={setDates}
+                                minDate={minStartDate.toJSDate()}
+                                maxDate={maxEndDate.toJSDate()}
+                                startDate={startDate ? startDate.toJSDate() : null}
+                                endDate={endDate ? endDate.toJSDate() : null}
+                                // dayClassName={(date) => {
+                                //     return "bg-l8-yellow text-black hover:bg-amber-500"
+                                // }}
+                                selectsRange
+                            // onChange={handleDateChange} //only when value has changed
+                            />
+                            {/* <DatePicker
+                            selected={endDate.toJSDate()}
+                            onSelect={setEndDate} //when day is clicked
+                        // onChange={handleDateChange} //only when value has changed
+                        /> */}
+                        </div>
+                        <DayPlotButton className="block !border-0 !rounded-none w-full" daysToSet={30} startDate={startDate} endDate={endDate} setPlotDates={setPlotDates}>Last 30 days</DayPlotButton>
+                        <DayPlotButton className="block !border-0 !rounded-none w-full" daysToSet={999} startDate={startDate} endDate={endDate} setPlotDates={setPlotDates}>All days</DayPlotButton>
+                    </Dropdown>
+                </div>
+                <div className="flex justify-center space-x-2">
+                    <HourPlotButton hoursToSet={'all'} currentHours={currentHours} setPlotHours={setPlotHours}>{hourModeMap["all"]}</HourPlotButton>
+                    <HourPlotButton hoursToSet={'slowest'} currentHours={currentHours} setPlotHours={setPlotHours}>{hourModeMap["slowest"]}</HourPlotButton>
+                    <HourPlotButton hoursToSet={'fastest'} currentHours={currentHours} setPlotHours={setPlotHours}>{hourModeMap["fastest"]}</HourPlotButton>
+                    {/* <HourPlotButton hoursToSet={'difference'} currentHours={currentHours} setPlotHours={setPlotHours}>{hourModeMap["difference"]}</HourPlotButton> */}
+                </div>
             </div>
-            <div className="flex justify-center">
-                <HourPlotButton hoursToSet={'all'} currentHours={currentHours} setPlotHours={setPlotHours}>{hourModeMap["all"]}</HourPlotButton>
-                <HourPlotButton hoursToSet={'slowest'} currentHours={currentHours} setPlotHours={setPlotHours}>{hourModeMap["slowest"]}</HourPlotButton>
-                <HourPlotButton hoursToSet={'fastest'} currentHours={currentHours} setPlotHours={setPlotHours}>{hourModeMap["fastest"]}</HourPlotButton>
-                {/* <HourPlotButton hoursToSet={'difference'} currentHours={currentHours} setPlotHours={setPlotHours}>{hourModeMap["difference"]}</HourPlotButton> */}
-            </div>
+            <h2 className="text-center text-xl py-2">{`${startDate?.toFormat("MMMM dd, yyyy")} to ${endDate?.toFormat("MMMM dd, yyyy")}`}</h2>
         </div>
     )
 }
@@ -268,8 +375,28 @@ const medianTripTimesPerBlockOfOneLaneClosures = (maxClosedBlocks: number, route
     })
 }
 
-export function Main({ routeData }: { routeData: RouteTime[] }) {
-    const [plotDays, setPlotDays] = useState(7);
+
+export function Main({ loaderData }: { loaderData: { initialPlotStartDate: string, initialPlotEndDate: string, routeData: RouteTime[] } }) {
+    // const [plotDays, setPlotDays] = useState(7);
+    const { initialPlotStartDate, initialPlotEndDate, routeData } = loaderData;
+    const [minStartDate, setMinStartDate] = useState(DateTime.fromJSDate(new Date(Math.min(...routeData.map(routeDatum => parseInt(routeDatum.unixMilliseconds))))));
+    const [startDate, setStartDate] = useState<DateTime | null>(DateTime.fromISO(initialPlotStartDate));
+    const [endDate, setEndDate] = useState<DateTime | null>(DateTime.fromISO(initialPlotEndDate));
+    const [prevStartDate, setPrevStartDate] = useState<DateTime | null>(startDate);
+    const [prevEndDate, setPrevEndDate] = useState<DateTime | null>(endDate);
+    const [maxEndDate, setMaxEndDate] = useState(DateTime.fromJSDate(new Date(Math.max(...routeData.map(routeDatum => parseInt(routeDatum.unixMilliseconds))))));
+    const setPlotDates = (newStartDate: DateTime | null, newEndDate: DateTime | null) => {
+        setPrevStartDate(startDate);
+        if (endDate && newStartDate && startDate) {
+            setPrevEndDate(endDate.toMillis() < newStartDate.toMillis() ? newStartDate.plus({ weeks: 1 }) : endDate);
+        }
+        setStartDate(newStartDate);
+        if (newEndDate && newStartDate) {
+            setEndDate(newEndDate.toMillis() < newStartDate.plus({ days: 1 })?.toMillis() ? newStartDate.plus({ days: 1 }) : newEndDate);
+        } else {
+            setEndDate(newEndDate)
+        }
+    }
     const [plotHours, setPlotHours] = useState<PlotHours>('all');
 
     const eastboundContainerRef = useRef<HTMLDivElement>(null);
@@ -308,29 +435,41 @@ export function Main({ routeData }: { routeData: RouteTime[] }) {
 
     // First, filter and estimate-pad the raw RouteTime data
     const timespanFilteredRouteData = routeData
-        .filter(routeDatum => DateTime.now().minus({ days: plotDays }).toMillis() < parseInt(routeDatum.unixMilliseconds));
+        .filter(routeDatum => (startDate ?? prevStartDate ?? minStartDate).toMillis() < parseInt(routeDatum.unixMilliseconds))
+        .filter(routeDatum => (endDate ?? prevEndDate ?? maxEndDate).toMillis() > parseInt(routeDatum.unixMilliseconds));
     const eastTimespanFilteredRouteData = estimatePadRouteData(timespanFilteredRouteData.filter(routeDatum => routeDatum.direction === "eastbound"));
     const westTimespanFilteredRouteData = estimatePadRouteData(timespanFilteredRouteData.filter(routeDatum => routeDatum.direction === "westbound"));
 
-    // Then, map to EnhancedRouteTime (with routeMinutes and routeDateTime)
+    // Then, map to EnhancedRouteTime (with routeMinutes and routeDate)
     const eastTimespanGroomedRouteData: EnhancedRouteTime[] = eastTimespanFilteredRouteData
         .map(routeDatum => ({
             ...routeDatum,
             routeMinutes: routeDatum.routeSeconds / 60,
-            routeDateTime: new Date(Number(routeDatum.unixMilliseconds)),
+            routeDate: new Date(Number(routeDatum.unixMilliseconds)),
+            plotRouteDate: new Date(Number(routeDatum.unixMilliseconds)),
         }));
     const westTimespanGroomedRouteData: EnhancedRouteTime[] = westTimespanFilteredRouteData
         .map(routeDatum => ({
             ...routeDatum,
             routeMinutes: routeDatum.routeSeconds / 60,
-            routeDateTime: new Date(Number(routeDatum.unixMilliseconds)),
+            routeDate: new Date(Number(routeDatum.unixMilliseconds)),
+            plotRouteDate: new Date(Number(routeDatum.unixMilliseconds)),
         }));
 
     const dayReduce = (acc: { [date: string]: EnhancedRouteTime[] }, datum: EnhancedRouteTime) => {
-        const date = DateTime.fromJSDate(datum.routeDateTime).toLocaleString(DateTime.DATE_SHORT);
+        const date = DateTime.fromJSDate(datum.routeDate).toLocaleString(DateTime.DATE_SHORT);
         acc[date] = acc[date] || [];
         acc[date].push(datum);
         return acc;
+    }
+
+    const emptyFilter = (routeDatum: EnhancedRouteTime) => {
+        return !isNaN(routeDatum.routeSeconds) && !('estimated' in routeDatum);
+    }
+
+    const singleHourFormat = (routeDatum: EnhancedRouteTime) => {
+        routeDatum.plotRouteDate = DateTime.fromJSDate(routeDatum.routeDate).startOf('day').toJSDate();
+        return routeDatum;
     }
 
     const hourReduce = (acc: EnhancedRouteTime[], datum: EnhancedRouteTime[]): EnhancedRouteTime[] => {
@@ -338,15 +477,15 @@ export function Main({ routeData }: { routeData: RouteTime[] }) {
             return acc.concat(datum);
         }
         const slowestHour = datum
-            .filter(routeDatum => !isNaN(routeDatum.routeSeconds))
+            .filter(emptyFilter)
             .reduce((acc, routeDatum) => {
-                if (routeDatum.routeSeconds > acc.routeSeconds) return routeDatum;
+                if (routeDatum.routeSeconds > acc.routeSeconds) return singleHourFormat(routeDatum);
                 return acc;
             });
         const fastestHour = datum
-            .filter(routeDatum => !isNaN(routeDatum.routeSeconds))
+            .filter(emptyFilter)
             .reduce((acc, routeDatum) => {
-                if (routeDatum.routeSeconds < acc.routeSeconds) return routeDatum;
+                if (routeDatum.routeSeconds < acc.routeSeconds) return singleHourFormat(routeDatum);
                 return acc;
             });
         switch (plotHours) {
@@ -412,31 +551,31 @@ export function Main({ routeData }: { routeData: RouteTime[] }) {
         <main className="flex items-center justify-center pt-16 pb-4 max-w-5xl mx-auto">
             <div className="flex-1 flex flex-col items-center gap-16 min-h-0 w-full">
                 <header className="flex flex-col items-center gap-9">
-                    <h1 className="text-3xl font-medium">Denny Way Traffic History</h1>
-                    <p>This is how much time it takes to get from Queen Anne Ave. to Virginia St. (or vice versa) on Denny Way every hour by car. It is a total distance of 1.1 miles.</p>
+                    <h1 className="text-5xl font-medium">Denny Way Traffic History</h1>
+                    <p className="max-w-lg">This is how much time it takes to get from Queen Anne Ave. to Virginia St. (or vice versa) on Denny Way every hour by car. It is a total distance of 1.1 miles:</p>
                 </header>
                 <div className="space-y-3 px-4 w-full">
-                    <h2 className="text-xl font-bold text-center">Eastbound</h2>
-                    <PlotButtons currentDays={plotDays} setPlotDays={setPlotDays} currentHours={plotHours} setPlotHours={setPlotHours} />
+                    <h2 className="text-3xl font-bold text-center">Eastbound</h2>
+                    <PlotButtons startDate={startDate} endDate={endDate} minStartDate={minStartDate} maxEndDate={maxEndDate} setPlotDates={setPlotDates} currentHours={plotHours} setPlotHours={setPlotHours} />
                     <div className="text-center lg:hidden">⬅ scroll ➡</div>
                     {/* <LiveIndicator /> */}
                     <div ref={eastboundContainerRef} className="overflow-x-auto w-full"></div>
                 </div>
                 <div className="space-y-3 px-4 w-full">
-                    <p className="text-xl font-bold text-center">Westbound</p>
-                    <PlotButtons currentDays={plotDays} setPlotDays={setPlotDays} currentHours={plotHours} setPlotHours={setPlotHours} />
+                    <p className="text-3xl font-bold text-center">Westbound</p>
+                    <PlotButtons startDate={startDate} endDate={endDate} minStartDate={minStartDate} maxEndDate={maxEndDate} setPlotDates={setPlotDates} currentHours={plotHours} setPlotHours={setPlotHours} />
                     <div className="text-center lg:hidden">⬅ scroll ➡</div>
                     <div ref={westboundContainerRef} className="overflow-x-auto w-full"></div>
                     {/* <LiveIndicator /> */}
                 </div>
-                <div className="space-y-3 w-full">
-                    <p>Walking speed is about 3 mph. Route times for each direction are queried every hour using the <a href="https://developers.google.com/maps/documentation/routes" target="_blank">Google Maps Routes API</a>. These times are calculated for cars, but a bus making stops would travel even more slowly.</p>
-                    <p>Here is a table showing the effect that lane closures have on travel times, depending on how many blocks are closed:</p>
-                    <PlotButtons currentDays={plotDays} setPlotDays={setPlotDays} currentHours={plotHours} setPlotHours={setPlotHours} />
+                <div className="space-y-3 w-full flex flex-col items-center">
+                    <p className="max-w-lg">Walking speed is about 3 mph. Route times for each direction are queried every hour using the <a href="https://developers.google.com/maps/documentation/routes" target="_blank">Google Maps Routes API</a>. These times are calculated for cars, but a bus making stops would travel even more slowly.</p>
+                    <p className="max-w-lg">Here is a table showing the effect that lane closures have on travel times, depending on how many blocks are closed:</p>
+                    <PlotButtons className="w-full" startDate={startDate} endDate={endDate} minStartDate={minStartDate} maxEndDate={maxEndDate} setPlotDates={setPlotDates} currentHours={plotHours} setPlotHours={setPlotHours} />
                     {/* <LiveIndicator /> */}
                     <div className="text-center md:hidden">⬅ scroll ➡</div>
                     <div className="overflow-x-auto w-full">
-                        <table className="mx-auto table-auto border-collapse border border-l8-yellow border-4">
+                        <table className="mx-auto table-auto border-collapse border-l8-yellow border-4">
                             <thead>
                                 <tr>
                                     <th className="px-3 py-1">Direction</th>
@@ -467,7 +606,7 @@ export function Main({ routeData }: { routeData: RouteTime[] }) {
                             </tbody>
                         </table>
                     </div>
-                    <p>This project was made to illustrate how helpful it would be for King County Metro Route 8 to have dedicated bus lanes on Denny Way. Learn more about Route 8's issues and how to fix them <a href="https://fixthel8.com/" target="_blank">here</a>.</p>
+                    <p className="max-w-lg">This project was made to illustrate how helpful it would be for King County Metro Route 8 to have dedicated bus lanes on Denny Way. Learn more about Route 8's issues and how to fix them <a href="https://fixthel8.com/" target="_blank">here</a>.</p>
                 </div>
                 <footer className="text-gray-300 text-sm">
                     Source: <a href="https://github.com/intcreator/denny-way-traffic" target="_blank">GitHub</a>
